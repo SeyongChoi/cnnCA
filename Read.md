@@ -1,0 +1,1 @@
+Steerable CNN Model to Predict Contact angle of water drople on the texturized surface.
