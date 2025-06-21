@@ -1,142 +1,141 @@
-import pandas as pd
+import torch
+from torch.utils.data import Dataset
 
-from unitcell import UnitCell
-from typing import Optional, Literal
-from sklearn.preprocessing import MinMaxScaler
-
-class DatasetBuilder:
+class ANNDataset(Dataset):
     """
-    DatasetBuilder는 CSV 파일에서 데이터를 불러오고, 정규화 및 모델 타입에 따라
-    입력(features)과 출력(targets)을 생성하는 기능을 제공합니다.
-
-    Attributes
-    ----------
-    data_fpath : str
-        CSV 파일 경로.
-    norm_ca_int : bool
-        ca_int_deg 값을 정규화할지 여부.
-    norm_height : bool
-        height 값을 정규화할지 여부.
-    dataset : pd.DataFrame
-        정규화된 데이터셋.
+    ANN 모델 학습용 PyTorch Dataset.
+    lattice를 flatten하여 ca_int, dL과 concat한 1D 벡터를 반환합니다.
     """
 
-    def __init__(self,
-                 data_fpath: str,
-                 norm_ca_int: bool = True,
-                 norm_height: bool = True):
+    def __init__(self, inputs, outputs):
         """
-        DatasetBuilder 초기화 및 데이터셋 로딩.
-
         Parameters
         ----------
-        data_fpath : str
-            CSV 파일 경로.
-        norm_ca_int : bool, optional
-            ca_int_deg 값을 정규화 여부, 기본값 True.
-        norm_height : bool, optional
-            height 값을 정규화 여부, 기본값 True.
-        """
-        self.data_fpath = data_fpath
-        self.norm_ca_int = norm_ca_int
-        self.norm_height = norm_height
-        self.dataset = self._load_dataset()
-
-    def _load_dataset(self) -> pd.DataFrame:
-        """
-        CSV 파일에서 데이터를 불러오고 height, ca_int_deg 컬럼을 정규화함.
-
-        Returns
-        -------
-        pd.DataFrame
-            정규화된 데이터프레임
-        """
-        dataset = pd.read_csv(self.data_fpath, header=0)
-
-        # height 정규화
-        if self.norm_height:
-            min_max = MinMaxScaler()
-            dataset['norm_height'] = min_max.fit_transform(dataset[['height']])
-
-        # ca_int_deg 정규화
-        if self.norm_ca_int:
-            min_max = MinMaxScaler()
-            dataset['norm_ca_int'] = min_max.fit_transform(dataset[['ca_int_deg']])
-
-        return dataset
-
-    def build(self,
-              grid: Optional[int] = 10,
-              pbc_step: Optional[int] = 15,
-              model: Literal["ANN", "CNN", "SteerableCNN"] = "SteerableCNN"):
-        """
-        데이터셋을 주어진 모델 형태에 따라 가공하여 입력과 출력을 생성함.
-
-        Parameters
-        ----------
-        grid : int, optional
-            UnitCell 생성 시 사용할 격자(grid) 해상도.
-        pbc_step : int, optional
-            PBC 적용 시 사용될 step 수 (CNN 전용).
-        model : {"ANN", "CNN", "SteerableCNN"}, optional
-            사용할 모델 형태.
-
-        Returns
-        -------
         inputs : list
-            모델 입력 데이터 (lattice, ca_int, dL).
+            각 항목은 (lattice, ca_int, dL)의 튜플로 구성됨
         outputs : list
-            모델 타겟 데이터 (ca_exp_deg).
+            각 항목은 target 값 (ca_exp_deg)
         """
-        inputs = []
-        outputs = []
+        self.inputs = inputs
+        self.outputs = outputs
 
-        for _, row in self.dataset.iterrows():
-            # UnitCell 인스턴스 생성
-            unit_cell = UnitCell(
-                width=row['width'],
-                spacing=row['pitch'],
-                height=row.get('norm_height', row['height']),
-                shape=row['shape'],
-                ca_int=row.get('norm_ca_int', row['ca_int_deg']),
-                grid=grid
-            )
+    def __len__(self):
+        # 전체 데이터 개수 반환
+        return len(self.inputs)
 
-            if model in ["SteerableCNN", "ANN"]:
-                # SteerableCNN, ANN 모델의 입력 형식
-                inputs.append([unit_cell.lattice(), unit_cell.ca_int, unit_cell.dL])
-                outputs.append(row['ca_exp_deg'])
+    def __getitem__(self, idx):
+        """
+        하나의 샘플을 반환합니다.
 
-            else:  # CNN 모델 처리
-                lattices = [unit_cell.lattice()]
-                # H, V, D 방향의 periodic boundary condition 적용
-                for direction in ['H', 'V', 'D']:
-                    lattices.extend(unit_cell.lattice_pbc(direction=direction, pbc_step=pbc_step))
-                
-                # 각 lattice에 대해 입력 생성
-                for lattice in lattices:
-                    inputs.append([lattice, unit_cell.ca_int, unit_cell.dL])
-                    outputs.append(row['ca_exp_deg'])
+        Returns
+        -------
+        input_tensor : torch.Tensor
+            Flatten된 lattice (1D)와 ca_int, dL이 연결된 1차원 텐서
+        output_tensor : torch.Tensor
+            예측 대상 값 (ca_exp_deg)
+        """
+        lattice, ca_int, dL = self.inputs[idx]
 
-        return inputs, outputs
-            
+        # lattice: 2D numpy array → 1D tensor
+        lattice_flat = torch.tensor(lattice, dtype=torch.float32).flatten()
+
+        # ca_int와 dL을 tensor로 변환 (1D scalar tensor)
+        ca_int_tensor = torch.tensor([ca_int], dtype=torch.float32)
+        dL_tensor = torch.tensor([dL], dtype=torch.float32)
+
+        # [lattice_flat, ca_int, dL]을 하나의 벡터로 이어붙임
+        input_tensor = torch.cat([lattice_flat, ca_int_tensor, dL_tensor], dim=0)
+
+        # target tensor (ca_exp_deg)
+        output_tensor = torch.tensor([self.outputs[idx]], dtype=torch.float32)
+
+        return input_tensor, output_tensor
+    
+class CNNDataset(Dataset):
+    """
+    CNN 및 SteerableCNN 모델 학습용 PyTorch Dataset.
+    lattice는 2D 텐서 형태(이미지처럼), ca_int와 dL은 별도 scalar 텐서로 반환됩니다.
+    """
+
+    def __init__(self, inputs, outputs):
+        """
+        Parameters
+        ----------
+        inputs : list
+            각 항목은 (lattice, ca_int, dL)의 튜플
+        outputs : list
+            각 항목은 target 값 (ca_exp_deg)
+        """
+        self.inputs = inputs
+        self.outputs = outputs
+
+    def __len__(self):
+        # 전체 샘플 개수
+        return len(self.inputs)
+
+    def __getitem__(self, idx):
+        """
+        하나의 샘플을 반환합니다.
+
+        Returns
+        -------
+        lattice_tensor : torch.Tensor
+            Conv layer에 입력될 2D lattice 텐서, shape: (1, grid, grid)
+        ca_int_tensor : torch.Tensor
+            내부 FC layer 입력용 scalar 텐서
+        dL_tensor : torch.Tensor
+            내부 FC layer 입력용 scalar 텐서
+        output_tensor : torch.Tensor
+            예측 대상 값 (ca_exp_deg)
+        """
+        lattice, ca_int, dL = self.inputs[idx]
+
+        # lattice: numpy array → 2D 텐서로 변환 후 채널 차원 추가 (1, grid, grid)
+        lattice_tensor = torch.tensor(lattice, dtype=torch.float32).unsqueeze(0)
+
+        # ca_int와 dL 각각 scalar 텐서로 변환
+        ca_int_tensor = torch.tensor([ca_int], dtype=torch.float32)
+        dL_tensor = torch.tensor([dL], dtype=torch.float32)
+
+        # target tensor
+        output_tensor = torch.tensor([self.outputs[idx]], dtype=torch.float32)
+
+        return lattice_tensor, ca_int_tensor, dL_tensor, output_tensor
+    
+    
 
 if __name__=="__main__":
     import os
+    from reader import DatasetReader
 
     data_root_dir = "D:\\SteerableCNNCA\\data\\"
     data_fpath = os.path.join(data_root_dir, "cnnCA_input_data.csv")
-
+    norm_ca_int = True
+    norm_height = True
     # DatasetBuilder 인스턴스 생성 및 데이터셋 로드
-    builder = DatasetBuilder(data_fpath, norm_ca_int=True, norm_height=True)
+    reader = DatasetReader(data_fpath, norm_ca_int=norm_ca_int, norm_height=norm_height)
 
-    print(builder.dataset.head())
-    print(builder.dataset.shape)
+    print(reader.dataset.head())
+    print(reader.dataset.shape)
 
     grid = 100
     pbc_step = 15
-    inputs, outputs = builder.build(grid, pbc_step, model="CNN")
+    model = "CNN"  # 또는 "SteerableCNN", "ANN"
+
+    # 데이터셋 읽기
+    inputs, outputs = reader.read(grid, pbc_step, model=model)
     print(f"Number of inputs: {len(inputs)}")
     print(f"Number of outputs: {len(outputs)}")
 
-    
+    if model == "ANN":
+        # ANN 모델용 데이터셋 생성
+        dataset = ANNDataset(inputs, outputs)
+        print(f"ANN Dataset size: {len(dataset)}")
+        sample_input, sample_output = dataset[0]
+        print(f"Sample input shape: {sample_input.shape}, Sample output: {sample_output.item()}")
+    else:
+        # CNN 또는 SteerableCNN 모델용 데이터셋 생성
+        dataset = CNNDataset(inputs, outputs)
+        print(f"CNN Dataset size: {len(dataset)}")
+        sample_input, ca_int, dL, sample_output = dataset[0]
+        print(f"Sample input shape: {sample_input.shape}, ca_int: {ca_int.item()}, dL: {dL.item()}, Sample output: {sample_output.item()}")
