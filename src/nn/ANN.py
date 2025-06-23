@@ -49,14 +49,17 @@ class ANNModel(pl.LightningModule):
         nn.Sequential 형태로 구성된 신경망 모델.
     """
 
-    def __init__(self, input_dim, hidden_dims, output_dim, dropout_rates, weight_init='xavier_uniform', lr=1e-3, loss_fn='MSE', optimizer='Adam', weight_decay=0.0):
+    def __init__(self, input_dim, hidden_dims, output_dim, dropout_rates, weight_init='xavier_uniform',
+                  lr=1e-3, loss_fn='MSE', optimizer='Adam', weight_decay=0.0):
         super(ANNModel, self).__init__()
         self.save_hyperparameters()  # 하이퍼파라미터 저장
         self.weight_init = weight_init  # 가중치 초기화 방법
 
         layers = []               # nn.Sequential에 넣을 계층들을 저장할 리스트
         in_dim = input_dim        # 첫 번째 층의 입력 차원
-        
+        # Dropout 리스트 길이 검증
+        assert len(dropout_rates) == len(hidden_dims), \
+            "fc_dropout_rates와 hidden_dims 길이는 같아야 합니다."
 
         # 은닉층 구성
         for hidden_dim, dropout_rate in zip(hidden_dims, dropout_rates):
