@@ -1,0 +1,27 @@
+# Load for dataset
+dataset:
+  data_root_dir: "D:\\SteerableCNNCA\\data\\"
+  normalize:
+    ca_int: True
+    height: True
+  # Setting for the dataset
+  grid_size: 100 
+  pbc_step: 15
+  split: [0.7, 0.1, 0.2] #[train_ratio, val_ratio, test_ratio]
+
+# Model settings
+model:
+  type: "CNN" # "ANN" or "CNN" or "SteerableCNN"
+  # hyperparameters for Model
+  hidden_dims: [1000, 100] # Fully Connected Layer의 hidden layer
+  dropout_rates: [0.2, 0.2] # Fully Connected Layer의 dropout rate 
+  weight_init: "he_normal" # 'xavier_uniform' or 'xavier_normal' or 'he_uniform' or 'he_normal' or 'kaiming_uniform' or 'kaiming_normal' or 'orthogonal' or 'default'
+
+# setting for the training
+training:
+  device: "cpu" # "cpu" or "cuda"
+  batch_size: 32
+  max_epochs: 1000
+  lr: 0.001 # learning rate        
+  loss_fn: "mse" # "mse" or "mae"
+  optimizer: "adam" # "adam" or "sgd" or "rmsprop"

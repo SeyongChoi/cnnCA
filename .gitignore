@@ -3,5 +3,7 @@
 /src/__pycache__/
 /ref/
 /src/lightning_logs/
+/src/nn/lightning_logs/
+/src/nn/__pycache__/
 /src/checkpoints/
 *.pyc

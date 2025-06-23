@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 import wandb
 import contextlib
-from torchsummary import summary
+from torchinfo import summary
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
@@ -48,7 +48,7 @@ def get_input_dim(train_loader, model_type="ANN"):
         # Assuming inputs are in shape (batch_size, channels, height, width)
         return inputs_lattice.shape[1:]  # Return (channels, height, width)
 
-def log_model_summary(model, input_dim, device='cpu', logger=None):
+def log_model_summary(model, input_dim, device='cpu', model_type='ANN', logger=None):
     """
     Log the model summary to the logger.
     
@@ -66,7 +66,10 @@ def log_model_summary(model, input_dim, device='cpu', logger=None):
     if logger is not None:
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            summary(model, input_size=(input_dim,), device=device)
+            if model_type == 'ANN':
+                summary(model, input_size=(input_dim,), device=device)
+            # elif model_type in ['CNN', 'SteerableCNN']:
+            #     summary(model, input_size=input_dim, device=device)
         summary_str = buffer.getvalue()
         logger.info("\n" + summary_str)  # 보기 좋게 줄 바꿈 추가
 
