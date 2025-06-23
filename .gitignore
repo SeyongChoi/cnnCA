@@ -2,3 +2,6 @@
 /.idea/
 /src/__pycache__/
 /ref/
+/src/lightning_logs/
+/src/checkpoints/
+*.pyc
