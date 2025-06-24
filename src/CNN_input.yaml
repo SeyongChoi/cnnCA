@@ -28,7 +28,7 @@ model:
 # setting for the training
 training:
   device: "cpu"                # "cpu" or "cuda"
-  batch_size: 32
+  batch_size: 1
   max_epochs: 10
   lr: 0.001                    # learning rate        
   loss_fn: "mse"               # "mse" or "mae"
@@ -40,7 +40,7 @@ logging:
     wandb:
       enable: True
       project_name: "SteerableCNNCA"
-      run_name: "run_1"                # Name of the run
+      run_name: "cnn_run_1"                # Name of the run
     TensorBoard:
       enable: True
       log_dir: "logs"                  # Directory to save TensorBoard logs
