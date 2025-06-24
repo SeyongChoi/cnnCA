@@ -17,7 +17,7 @@ import wandb
 import contextlib
 from torchinfo import summary
 from pytorch_lightning import Trainer
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 
 
@@ -43,10 +43,10 @@ def get_input_dim(train_loader, model_type="ANN"):
         # Flatten the input for ANN
         return inputs.shape[1:]
     elif model_type in ["CNN", "SteerableCNN"]:
-        inputs_lattice, _, _, _ = next(iter(train_loader))
+        inputs_lattice, inputs_ca_int, inputs_dL, _ = next(iter(train_loader))
         # For CNN, return the shape of the input tensor excluding the batch size
         # Assuming inputs are in shape (batch_size, channels, height, width)
-        return inputs_lattice.shape[1:]  # Return (channels, height, width)
+        return inputs_lattice.shape[1:], inputs_ca_int.shape[1:], inputs_dL.shape[1:]  # Return (channels, height, width)
 
 def log_model_summary(model, input_dim, device='cpu', model_type='ANN', logger=None):
     """
@@ -68,8 +68,17 @@ def log_model_summary(model, input_dim, device='cpu', model_type='ANN', logger=N
         with contextlib.redirect_stdout(buffer):
             if model_type == 'ANN':
                 summary(model, input_size=(input_dim,), device=device)
-            # elif model_type in ['CNN', 'SteerableCNN']:
-            #     summary(model, input_size=input_dim, device=device)
+            elif model_type in ['CNN', 'SteerableCNN']:
+                inputs_lattice, inputs_ca_int, inputs_dL = input_dim
+                summary(
+                    model,
+                    input_data=(
+                        inputs_lattice.to(device),
+                        inputs_ca_int.to(device),
+                        inputs_dL.to(device)
+                    ),
+                    device=device
+                )
         summary_str = buffer.getvalue()
         logger.info("\n" + summary_str)  # 보기 좋게 줄 바꿈 추가
 
@@ -105,9 +114,9 @@ def initialize_logger(logname):
     return logger
 
 
-def print_conditions(logger, config):
+def print_conditions(logger, config, indent_level=0):
     """
-    Print the training conditions to the logger.
+    Print the training conditions to the logger, including nested dictionaries.
     
     Parameters
     ----------
@@ -115,19 +124,45 @@ def print_conditions(logger, config):
         The logger instance to log the conditions.
     config : dict
         Configuration dictionary containing training conditions.
+    indent_level : int
+        Current indentation level for nested dictionaries.
     """
-    logger.info('=' * 102)
-    logger.info('|{:^100}|'.format('Conditions of Training the Model for predicting CA'))
-    logger.info('=' * 102)
-    
+    INDENT_UNIT = 2
+    MAX_KEY_WIDTH = 21
+    VALUE_WIDTH = 76
+    LINE_WIDTH = MAX_KEY_WIDTH + VALUE_WIDTH + 5  # '| key | value |'
+
+    def format_key(key, level):
+        # 들여쓰기 없이 레벨 기반 prefix만 붙여서 정렬 깨지지 않게
+        prefix = " → " * level
+        display_key = f"{prefix}{key}"
+        return f"{display_key:<{MAX_KEY_WIDTH}}"
+
+    if indent_level == 0:
+        logger.info('=' * LINE_WIDTH)
+        logger.info('|{:^100}|'.format('Conditions of Training the Model for predicting CA'))
+        logger.info('=' * LINE_WIDTH)
+
     for section, settings in config.items():
-        logger.info('|{:^100}|'.format(f'{section} settings'))
-        logger.info('-' * 102)
-        for key, value in settings.items():
-            logger.info(f"|{key:^21}| {str(value):<76} |")
-        logger.info('-' * 102)
-    
-    logger.info('\n')
+        if indent_level == 0:
+            logger.info('|{:^100}|'.format(f'{section} settings'))
+            logger.info('-' * LINE_WIDTH)
+
+        if isinstance(settings, dict):
+            for key, value in settings.items():
+                if isinstance(value, dict):
+                    logger.info(f"| {format_key(key, indent_level)}| {'':<{VALUE_WIDTH}} |")
+                    print_conditions(logger, value, indent_level + 1)
+                else:
+                    logger.info(f"| {format_key(key, indent_level)}| {str(value):<{VALUE_WIDTH}} |")
+        else:
+            logger.info(f"| {format_key(section, indent_level)}| {str(settings):<{VALUE_WIDTH}} |")
+
+        if indent_level == 0:
+            logger.info('-' * LINE_WIDTH)
+
+    if indent_level == 0:
+        logger.info('\n')
     return
 
 def load_n_split_dataset(data_fpath, norm_ca_int=True, norm_height=True,
@@ -321,6 +356,20 @@ def main(input_yaml='./input.yaml', seed=1234):
     ### 모델 관련 설정 (model type & hyperparameters)
     # 사용할 모델의 종류 (ANN, CNN, SteerableCNN 중 하나)
     model_type = config['model']['type']
+    # CNN 전용
+    # Convolutional Layer의 channel 수
+    conv_channels = config['model']['conv_channels'] if 'conv_channels' in config['model'] else [32, 64, 128]
+    # Convolutional Layer의 dropout rate
+    conv_dropout_rates = config['model']['conv_dropout_rates'] if 'conv_dropout_rates' in config['model'] else [0.2, 0.2, 0.2]
+    # Convolutional Layer의 kernel size
+    conv_kernel = config['model']['conv_kernel'] if 'conv_kernel' in config['model'] else 2
+    # Convolutional Layer의 stride
+    conv_stride = config['model']['conv_stride'] if 'conv_stride' in config['model'] else 1
+    # Pooling Layer의 kernel size
+    pool_kernel = config['model']['pool_kernel'] if 'pool_kernel' in config['model'] else 2
+    # Pooling Layer의 stride
+    pool_stride = config['model']['pool_stride'] if 'pool_stride' in config['model'] else 2
+
     # Fully Connected Layer의 hidden layer
     hidden_dims = config['model']['hidden_dims'] if 'hidden_dims' in config['model'] else [1000, 100]
     # Fully Connected Layer의 dropout 비율
@@ -345,6 +394,22 @@ def main(input_yaml='./input.yaml', seed=1234):
     # 최적화 알고리즘
     optimizer = config['training']['optimizer'] if 'optimizer' in config['training'] else 'adam'  # 기본값은 Adam
     
+    ### 학습 logging 설정
+    logging_config = config['logging'] if 'logging' in config else {}
+    # WandB 설정
+    use_wandb = logging_config.get("wandb", {}).get("enable", False)
+    wandb_project = logging_config.get("wandb", {}).get("project_name", "DefaultProject")
+    wandb_run_name = logging_config.get("wandb", {}).get("run_name", None)
+    if use_wandb:
+        wandb.init(
+            project=wandb_project,
+            name=wandb_run_name,
+            config=config,  # 전체 config를 WandB에 기록
+            reinit=True  # 이미 초기화된 경우에도 재초기화
+        )
+    # TensorBoard 설정
+    use_tensorboard = logging_config.get("TensorBoard", {}).get("enable", False)
+    tensorboard_log_dir = logging_config.get("TensorBoard", {}).get("log_dir", "logs")
     # ---------------------------------------------------------------------------------------------------------------- #
     # ----- logging for whole process & conditions ----- #
     logname = f"{model_type}_training.log"
@@ -393,24 +458,65 @@ def main(input_yaml='./input.yaml', seed=1234):
                          weight_init=weight_init, lr=lr, loss_fn=loss_fn,
                          optimizer=optimizer, weight_decay=weight_decay)
         # 모델 요약 출력
-        # logger.info(summary(model, input_size=(input_dim,), device=device))
-        log_model_summary(model, input_dim, device=device, logger=logger)
+        log_model_summary(model, input_dim, device=device, model_type=model_type, logger=logger)
     elif model_type == "CNN":
-        # ANN 모델의 입력 차원 계산
-        input_dim = get_input_dim(train_loader, model_type)[0]
-        logger.info(f"Input dimension for {model_type} model: {input_dim}")
-    #     model = CNNModel(grid_size)
+        # CNN 모델의 입력 차원 계산
+        input_dims = get_input_dim(train_loader, model_type)
+        for i, dim in enumerate(input_dims):
+            if i == 0:
+                logger.info(f"Input channel for {model_type} model: {dim[0]}")
+                input_channel = dim[0]
+            elif i == 1:
+                logger.info(f"ca_int_dim for {model_type} model: {dim[0]}")
+                ca_int_dim = dim[0]
+            elif i == 2:
+                logger.info(f"dL_dim for {model_type} model: {dim[0]}")
+                dL_dim = dim[0]
+        
+        # CNN 모델 인스턴스 생성
+        model = CNNModel(input_channel, conv_channels, conv_kernel, conv_stride, conv_dropout_rates,
+                 pool_kernel, pool_stride, grid_size, ca_int_dim, dL_dim, hidden_dims, dropout_rates,
+                 weight_init=weight_init, lr=lr, loss_fn=loss_fn, optimizer=optimizer, weight_decay=weight_decay)
+        # 모델 요약 출력
+        inputs_lattice, inputs_ca_int, inputs_dL, _ = next(iter(train_loader))
+        input_dim = (inputs_lattice, inputs_ca_int, inputs_dL)
+        log_model_summary(model, input_dim, device=device, model_type=model_type, logger=logger)
     # elif model_type == "SteerableCNN":
     #     model = SteerableCNNModel(grid_size)
     
     logger.info('-' * 102)
     logger.info(f"Setting up the Lightning Trainer & Logger...")
     logger.info('-' * 102)
-    pl_logger = logging.getLogger("pytorch_lightning")
-    pl_logger.setLevel(logging.INFO)
-    pl_logger.addHandler(logger.handlers[1])  # 기존 파일 핸들러 복사
-    # WandB Logger 설정
-    # wandb_logger = WandbLogger(project="CA_Prediction", name=f"{model_type}_training", log_model=True)
+    pl_logging = logging.getLogger("pytorch_lightning")
+    pl_logging.setLevel(logging.INFO)
+    pl_logging.addHandler(logger.handlers[1])  # 기존 파일 핸들러 복사
+    
+    # 개별 로거 준비
+    wandb_logger = None
+    tensorboard_logger = None
+    if use_wandb:
+        wandb_logger = WandbLogger(
+            project=wandb_project,
+            name=wandb_run_name,
+            log_model=True
+        )
+        logger.info(f"Using WandB logger - project: {wandb_project}, run: {wandb_run_name}")
+
+    if use_tensorboard:
+        tensorboard_logger = TensorBoardLogger(
+            save_dir=tensorboard_log_dir,
+            name=wandb_run_name or "default_run"
+        )
+        logger.info(f"Using TensorBoard logger - log dir: {tensorboard_log_dir}")
+
+    # 로거 리스트 생성
+    loggers = []
+    if wandb_logger:
+        loggers.append(wandb_logger)
+    if tensorboard_logger:
+        loggers.append(tensorboard_logger)
+
+    pl_logger =  loggers if len(loggers) > 1 else (loggers[0] if loggers else None)
 
     # Model Checkpoint 설정
     checkpoint_callback = ModelCheckpoint(
@@ -425,6 +531,8 @@ def main(input_yaml='./input.yaml', seed=1234):
     # Lightning Trainer
     trainer = Trainer(max_epochs=max_epochs,
                       accelerator=device,
+                      logger=pl_logger,
+                      log_every_n_steps=1,
                       callbacks=[checkpoint_callback])  # GPU 사용 시 accelerator="gpu"
     
 
@@ -432,19 +540,40 @@ def main(input_yaml='./input.yaml', seed=1234):
     # Best model 로드 후 test 평가
     best_model_path = checkpoint_callback.best_model_path
     logger.info(f"Best model path: {best_model_path}")
+    if model_type == "ANN":
+        best_model = ANNModel.load_from_checkpoint(
+            checkpoint_path=best_model_path,
+            input_dim=input_dim,
+            hidden_dims=hidden_dims,
+            output_dim=1,
+            dropout_rates=dropout_rates,
+            weight_init=weight_init,
+            lr=lr,
+            loss_fn=loss_fn,
+        )
+    elif model_type == "CNN":
+        best_model = CNNModel.load_from_checkpoint(
+            checkpoint_path=best_model_path,
+            input_channel=input_channel,
+            conv_channels=conv_channels,
+            conv_kernel=conv_kernel,
+            conv_stride=conv_stride,
+            conv_dropout_rates=conv_dropout_rates,
+            pool_kernel=pool_kernel,
+            pool_stride=pool_stride,
+            grid_size=grid_size,
+            ca_int_dim=ca_int_dim,
+            dL_dim=dL_dim,
+            hidden_dims=hidden_dims,
+            dropout_rates=dropout_rates,
+            weight_init=weight_init,
+            lr=lr,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            weight_decay=weight_decay
+        )
 
-    model = ANNModel.load_from_checkpoint(
-        checkpoint_path=best_model_path,
-        input_dim=input_dim,
-        hidden_dims=hidden_dims,
-        output_dim=1,
-        dropout_rates=dropout_rates,
-        weight_init=weight_init,
-        lr=lr,
-        loss_fn=loss_fn,
-    )
-
-    test_result = trainer.test(model, dataloaders=test_loader)
+    test_result = trainer.test(best_model, dataloaders=test_loader)
     logger.info(f"Test results: {test_result}")
     return
 

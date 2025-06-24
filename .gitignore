@@ -6,4 +6,6 @@
 /src/nn/lightning_logs/
 /src/nn/__pycache__/
 /src/checkpoints/
+/src/logs/
+/src/wandb/
 *.pyc

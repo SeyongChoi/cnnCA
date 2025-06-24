@@ -11,35 +11,36 @@ dataset:
 
 # Model settings
 model:
-  type: "ANN" # "ANN" or "CNN" or "SteerableCNN"
+  type: "CNN" # "ANN" or "CNN" or "SteerableCNN"
   # hyperparameters for Model
   # For only CNN and SteerableCNN
-  conv_channels: [10, 10, 10]         # Convolutional Layer의 channel 수
-  conv_dropout_rates: [0.2, 0.2, 0.2] # Convolutional Layer의 dropout rate
+  conv_channels: [10, 10, 10, 10, 10]         # Convolutional Layer의 channel 수
+  conv_dropout_rates: [0.1, 0.1, 0.1, 0.1, 0.1] # Convolutional Layer의 dropout rate
   conv_kernel: 4  # Convolutional Layer의 kernel size
   conv_stride: 1  # Convolutional Layer의 stride
   pool_kernel: 2  # Pooling Layer의 kernel size
   pool_stride: 2  # Pooling Layer의 stride
   # For commonly used in ANN, CNN, SteerableCNN
   hidden_dims: [1000, 100]  # Fully Connected Layer의 hidden layer
-  dropout_rates: [0.2, 0.2] # Fully Connected Layer의 dropout rate 
+  dropout_rates: [0.1, 0.1] # Fully Connected Layer의 dropout rate 
   weight_init: "he_normal"  # 'xavier_uniform' or 'xavier_normal' or 'he_uniform' or 'he_normal' or 'kaiming_uniform' or 'kaiming_normal' or 'orthogonal' or 'default'
   
 # setting for the training
 training:
-  device: "cpu" # "cpu" or "cuda"
+  device: "cpu"                # "cpu" or "cuda"
   batch_size: 32
   max_epochs: 10
-  lr: 0.001 # learning rate        
-  loss_fn: "mse" # "mse" or "mae"
-  optimizer: "adam" # "adam" or "sgd" or "rmsprop"
-  l2_reg: 0.1 # L2 regularization strength
+  lr: 0.001                    # learning rate        
+  loss_fn: "mse"               # "mse" or "mae"
+  optimizer: "adam"            # "adam" or "sgd" or "rmsprop"
+  l2_reg: 0.001                  # L2 regularization strength
 
 # setting for the logging
 logging:
-  wandb:
-    enable: True
-    project_name: "SteerableCNNCA"
-    entity: "your_wandb_entity" # Replace with your wandb entity
-    run_name: "run_1" # Name of the run
-  
+    wandb:
+      enable: True
+      project_name: "SteerableCNNCA"
+      run_name: "run_1"                # Name of the run
+    TensorBoard:
+      enable: True
+      log_dir: "logs"                  # Directory to save TensorBoard logs
