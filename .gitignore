@@ -1,11 +1,11 @@
 # pycharm idea
 /.idea/
-/src/__pycache__/
+/cnnca/__pycache__/
 /ref/
-/src/lightning_logs/
-/src/nn/lightning_logs/
-/src/nn/__pycache__/
-/src/checkpoints/
-/src/logs/
-/src/wandb/
+/cnnca/lightning_logs/
+/cnnca/nn/lightning_logs/
+/cnnca/nn/__pycache__/
+/cnnca/checkpoints/
+/cnnca/logs/
+/cnnca/wandb/
 *.pyc
