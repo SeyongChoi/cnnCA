@@ -7,19 +7,19 @@
 ```
 SteerableCNNCA/
 ├── config/               # YAML 설정 파일 (모델, 데이터셋, 학습 등)
-├── data/                 # 데이터셋 저장 폴더
+├── data/                 # 데이터셋 저장 디렉토리
 ├── cnnca/                # cnnCA source code
-    ├── unitcell.py           # UnitCell object
-    ├── dataset.py            # Dataset obejct 및 전처리 모듈
-    ├── reader.py             # 데이터셋 load 및 DataLoader 구축
-    ├── utils.py              # 시각화 및 기타 유틸 함수
-    ├── nn/                   # Neural Network 모델 정의
-        ├── ANN.py                   # ANN 모델 정의
-        ├── CNN.py                   # CNN 모델 정의
-        ├── SteerableCNN.py          # Steerable CNN 모델 정의    
-├── main.py               # 실행 엔트리포인트
+|   ├── unitcell.py           # UnitCell object
+|   ├── dataset.py            # Dataset obejct 및 전처리 모듈
+|   ├── reader.py             # 데이터 로드 및 DataLoader
+|   ├── utils.py              # 시각화 및 기타 유틸 함수
+|   └── nn/                   # Neural Network 모델 정의
+|       ├── ANN.py                   # ANN 모델 정의
+|       ├── CNN.py                   # CNN 모델 정의
+|       └── SteerableCNN.py          # Steerable CNN 모델 정의    
+├── main.py               # 실행 스크립트
 ├── requirements.txt      # 필요한 패키지 목록
-└── README.md             # 본 문서
+└── README.md             # 프로젝트 안내 문서
 ```
 
 ## 🧠 주요 기능
