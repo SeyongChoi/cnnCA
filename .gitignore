@@ -8,4 +8,7 @@
 /cnnca/checkpoints/
 /cnnca/logs/
 /cnnca/wandb/
+/logs/
+/wandb/
+/checkpoints/
 *.pyc
