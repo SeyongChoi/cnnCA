@@ -1,6 +1,6 @@
 import pandas as pd
 
-from unitcell import UnitCell
+from cnnca.unitcell import UnitCell
 from typing import Optional, Literal
 from sklearn.preprocessing import MinMaxScaler
 

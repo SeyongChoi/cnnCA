@@ -4,10 +4,10 @@ import yaml
 import logging
 import numpy as np
 
-from reader import DatasetReader
-from dataset import ANNDataset, CNNDataset
-from nn.ANN import ANNModel
-from nn.CNN import CNNModel
+from cnnca.reader import DatasetReader
+from cnnca.dataset import ANNDataset, CNNDataset
+from cnnca.nn.ANN import ANNModel
+from cnnca.nn.CNN import CNNModel
 # from nn.SteerableCNN import SteerableCNNModel
 
 import torch
@@ -317,7 +317,7 @@ def create_dataloaders(train_dataset, val_dataset, test_dataset, batch_size=32, 
     
     return train_loader, val_loader, test_loader
 
-def main(input_yaml='./input.yaml', seed=1234):
+def train(input_yaml='./input.yaml', seed=1234):
     """
     Main function to run the training process.
     
@@ -498,6 +498,7 @@ def main(input_yaml='./input.yaml', seed=1234):
         wandb_logger = WandbLogger(
             project=wandb_project,
             name=wandb_run_name,
+            sync_tensorboard=False,  # TensorBoard와 동기화
             log_model=True
         )
         logger.info(f"Using WandB logger - project: {wandb_project}, run: {wandb_run_name}")
@@ -584,4 +585,4 @@ if __name__ == "__main__":
     # 랜덤 시드 설정
     seed = 1234
 
-    main(input_yaml=input_yaml, seed=seed)
+    train(input_yaml=input_yaml, seed=seed)
