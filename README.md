@@ -25,11 +25,11 @@ All experiments are implemented in **PyTorch** and **PyTorch Lightning**, with *
 
 ### 1. Installation
 ```bash
-# Conda 환경 예시
+# Conda environment
 conda create -n cnnca python=3.8
 conda activate cnnca
 
-# 저장소 클론
+# clone the repository
 git clone https://github.com/SeyongChoi/cnnCA.git
 cd cnnCA
 
